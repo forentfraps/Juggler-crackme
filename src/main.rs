@@ -12,7 +12,10 @@ fn main() {
     let s = String::from("C:\\Windows\\System32\\ntdll.dll");
     let (_s2, ps2) = string_to_lpcstr(String::from("DbgBreakPoint"));
     let (_ws, pws) = string_to_lpcwstr(s);
+    let (_libname, plibname) =
+        string_to_lpcwstr(String::from("C:\\Windows\\System32\\advapi32.dll"));
     unsafe {
+        LoadLibrary(plibname);
         //hide!();
         let ntdll: HMODULE = GetModuleHandle(pws).unwrap();
         //hide!();

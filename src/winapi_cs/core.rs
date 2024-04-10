@@ -3,7 +3,6 @@ use super::utils::*;
 use std::arch::asm;
 use winapi::shared::minwindef::{BYTE, DWORD, FARPROC, HINSTANCE__, HMODULE, ULONG, WORD};
 use winapi::shared::ntdef::{HANDLE, LPCSTR, LPCWSTR, NULL, PVOID, ULONGLONG, UNICODE_STRING};
-use winapi::um::winnt::IMAGE_DATA_DIRECTORY;
 
 pub fn string_to_lpcwstr(s: String) -> (Vec<u16>, *const u16) {
     let mut wide_chars: Vec<u16> = s.encode_utf16().collect();
@@ -137,7 +136,11 @@ where
 type pRtlInitUnicodeString = fn(*mut UNICODE_STRING, LPCWSTR);
 type pLdrLoadDll = fn(LPCWSTR, ULONG, *mut UNICODE_STRING, *mut HMODULE);
 pub unsafe fn LoadLibrary(lpFileName: LPCWSTR) -> Option<HMODULE> {
-    let mut ustrModule: UNICODE_STRING;
+    let mut ustrModule: UNICODE_STRING = UNICODE_STRING {
+        Length: 0,
+        MaximumLength: 0,
+        Buffer: 0 as *mut u16,
+    };
     let mut hModule: HMODULE = 0 as *mut HINSTANCE__;
     let (_s, ps) = string_to_lpcstr(String::from("RtlInitUnicodeString"));
     let (_s1, ps1) = string_to_lpcstr(String::from("LdrLoadDll"));

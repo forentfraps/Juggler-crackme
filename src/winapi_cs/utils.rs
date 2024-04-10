@@ -1,12 +1,13 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
 use crc32fast::Hasher;
-use winapi::shared::minwindef::{BYTE, DWORD, HMODULE, ULONG, WORD};
-use winapi::shared::ntdef::{LONG, LPCSTR, LPCWSTR, PVOID, ULONGLONG, UNICODE_STRING};
 use std::char;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::ptr;
+use winapi::shared::minwindef::{BYTE, DWORD, HMODULE, ULONG, WORD};
+use winapi::shared::ntdef::{CHAR, LONG, LPCSTR, LPCWSTR, PVOID, ULONGLONG, UNICODE_STRING};
+use winapi::um::winnt::SHORT;
 
 #[repr(C)]
 pub struct PEB {
@@ -156,17 +157,66 @@ pub struct IMAGE_EXPORT_DIRECTORY {
     pub AddressOfNameOrdinals: DWORD,
 }
 
+const IMAGE_SIZEOF_SHORT_NAME: usize = 8;
+
+#[repr(C)]
+pub struct IMAGE_SECTION_HEADER {
+    pub Name: [BYTE; IMAGE_SIZEOF_SHORT_NAME],
+    pub Misc: DWORD, // Represents the union as a DWORD directly.
+    pub VirtualAddress: DWORD,
+    pub SizeOfRawData: DWORD,
+    pub PointerToRawData: DWORD,
+    pub PointerToRelocations: DWORD,
+    pub PointerToLinenumbers: DWORD,
+    pub NumberOfRelocations: WORD,
+    pub NumberOfLinenumbers: WORD,
+    pub Characteristics: DWORD,
+}
+#[repr(C)]
+pub struct BASE_RELOCATION_BLOCK {
+    pub PageAddress: DWORD,
+    pub BlockSize: DWORD,
+}
+#[repr(C)]
+pub struct BASE_RELOCATION_ENTRY {
+    pub data: SHORT,
+}
+
+impl BASE_RELOCATION_ENTRY {
+    pub fn offset(&self) -> SHORT {
+        self.data & 0x0FFF
+    }
+
+    pub fn type_(&self) -> SHORT {
+        (self.data >> 12) & 0xF
+    }
+}
+
+#[repr(C)]
+pub struct IMAGE_IMPORT_DESCRIPTOR {
+    // Directly using DWORD to substitute the union
+    pub OriginalFirstThunk: DWORD,
+    pub TimeDateStamp: DWORD,
+    pub ForwarderChain: DWORD,
+    pub Name: DWORD,
+    pub FirstThunk: DWORD,
+}
+
+#[repr(C)]
+pub struct IMAGE_THUNK_DATA {
+    pub Ordinal: ULONGLONG,
+}
+
+pub struct IMAGE_IMPORT_BY_NAME {
+    pub Hint: WORD,
+    pub Name: [CHAR; 1],
+}
 unsafe fn print_lpcwstr(lpcwstr: *const u16) {
     let mut len = 0;
-    // Count characters until null terminator is found
     while *lpcwstr.offset(len) != 0 {
         len += 1;
     }
-
-    // Create a slice from the raw parts (pointer and length)
     let slice = std::slice::from_raw_parts(lpcwstr, len as usize);
-
-    // Convert the wide string slice to an OsString, then to a String for printing
     let os_string = OsString::from_wide(slice);
     if let Some(string) = os_string.to_str() {
         println!("{}", string);
@@ -174,7 +224,6 @@ unsafe fn print_lpcwstr(lpcwstr: *const u16) {
         eprintln!("Failed to convert LPCWSTR to a String");
     }
 }
-
 
 fn crc32(bytes: &[u8]) -> u32 {
     let mut hasher = Hasher::new();
