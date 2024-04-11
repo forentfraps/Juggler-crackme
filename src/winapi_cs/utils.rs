@@ -1,11 +1,11 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
 use crc32fast::Hasher;
-use std::char;
+
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
-use std::ptr;
-use winapi::shared::minwindef::{BYTE, DWORD, HMODULE, ULONG, WORD};
+
+use winapi::shared::minwindef::{BYTE, DWORD, ULONG, WORD};
 use winapi::shared::ntdef::{CHAR, LONG, LPCSTR, LPCWSTR, PVOID, ULONGLONG, UNICODE_STRING};
 use winapi::um::winnt::SHORT;
 

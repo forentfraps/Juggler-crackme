@@ -1,8 +1,8 @@
 #![allow(non_snake_case, non_camel_case_types)]
 use super::utils::*;
 use std::arch::asm;
-use winapi::shared::minwindef::{BYTE, DWORD, FARPROC, HINSTANCE__, HMODULE, ULONG, WORD};
-use winapi::shared::ntdef::{HANDLE, LPCSTR, LPCWSTR, NULL, PVOID, ULONGLONG, UNICODE_STRING};
+use winapi::shared::minwindef::{BYTE, DWORD, HINSTANCE__, HMODULE, ULONG, WORD};
+use winapi::shared::ntdef::{LPCSTR, LPCWSTR, UNICODE_STRING};
 
 pub fn string_to_lpcwstr(s: String) -> (Vec<u16>, *const u16) {
     let mut wide_chars: Vec<u16> = s.encode_utf16().collect();
@@ -52,7 +52,7 @@ pub unsafe fn GetModuleHandle(lModuleName: LPCWSTR) -> Option<HMODULE> {
     None
 }
 
-pub unsafe fn GetProcAddress<F>(hModule: HMODULE, lpProcName: LPCSTR) -> Option<F>
+pub unsafe fn GetProcAddress_<F>(hModule: HMODULE, lpProcName: LPCSTR) -> Option<F>
 where
     F: 'static,
 {

@@ -1,6 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
+// extern crate embed_resource;
 
 fn main() {
     let asm_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("asm");
@@ -24,8 +25,16 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         out_dir.to_str().unwrap()
     );
+    Command::new("c_aes/make.bat").status().unwrap();
+    Command::new("c_verification/make.bat").status().unwrap();
+    /*    embed_resource::compile("c_aes/res1.rc");
+    embed_resource::compile("c_verification/res2.rc"); */
     println!("cargo:rustc-link-lib=static=tricks");
 
     // Tell cargo to invalidate the built crate whenever the assembly file changes
     println!("cargo:rerun-if-changed=asm/tricks.asm");
+    println!("cargo:rerun-if-changed=c_aes/aes_dll.c");
+    println!("cargo:rerun-if-changed=c_verification/verification.c");
+    /*println!("cargo:rerun-if-changed=c_verification/res2.rc");
+    println!("cargo:rerun-if-changed=c_aes/res1.rc");*/
 }
