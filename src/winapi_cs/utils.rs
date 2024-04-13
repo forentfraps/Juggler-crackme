@@ -2,7 +2,7 @@
 
 use crc32fast::Hasher;
 
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
 use std::os::windows::ffi::OsStringExt;
 
 use winapi::shared::minwindef::{BYTE, DWORD, ULONG, WORD};
@@ -202,11 +202,6 @@ pub struct IMAGE_IMPORT_DESCRIPTOR {
     pub FirstThunk: DWORD,
 }
 
-#[repr(C)]
-pub struct IMAGE_THUNK_DATA {
-    pub Ordinal: ULONGLONG,
-}
-
 pub struct IMAGE_IMPORT_BY_NAME {
     pub Hint: WORD,
     pub Name: [CHAR; 1],
@@ -224,7 +219,22 @@ unsafe fn print_lpcwstr(lpcwstr: *const u16) {
         eprintln!("Failed to convert LPCWSTR to a String");
     }
 }
+pub unsafe fn print_lpcstr(lpcstr: *const i8) {
+    if lpcstr.is_null() {
+        println!("Null pointer!");
+        return;
+    }
 
+    // Convert the LPCSTR (pointer to a null-terminated string) to a CStr.
+    let c_str = CStr::from_ptr(lpcstr);
+
+    // Convert the CStr to a Rust string slice (&str) for printing.
+    // This step checks the string for valid UTF-8 encoding.
+    match c_str.to_str() {
+        Ok(str_slice) => println!("{}", str_slice),
+        Err(e) => println!("Failed to convert LPCSTR to a Rust string: {:?}", e),
+    }
+}
 fn crc32(bytes: &[u8]) -> u32 {
     let mut hasher = Hasher::new();
     hasher.update(bytes);

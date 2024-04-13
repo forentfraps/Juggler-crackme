@@ -5,20 +5,10 @@
     global _KeyAdd
     global _invShiftRows
     global _invMixColumn
-
-    section .data
-        mask: db 00h, 05h, 0Ah, 0Fh, 04h, 09h, 0Eh, 03h, 08h, 0Dh, 02h, 07h, 0Ch, 01h, 06h, 0Bh
-
-
     section .text
 ;rcx -> address of block
 ;rax -> scratch
 ;rdx -> temp storage
-    ; _ShiftRows:
-    ;     movdqu xmm1, [rcx]
-    ;     pshufb xmm1, [mask]
-    ;     movdqu [rcx], xmm1
-
     _ShiftRows:
         mov dl, [rcx + 1]
         mov al, [rcx + 5]

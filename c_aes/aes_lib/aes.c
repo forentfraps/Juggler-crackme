@@ -16,16 +16,6 @@ extern void _KeyAdd(unsigned char* block, unsigned char* key);
 //     printf("\n");
 // }
 
-void INIT_CONST(void){
-    if (INIT == 0){
-        for (int i = 0; i < 256; ++i){
-            sbox[i] ^= 0xb6;
-            rsbox[i] ^= 0xb6;
-        }
-        INIT = 1;
-    }
-}
-
 void Decrypt(unsigned char* block, unsigned char* KeyList){
     _KeyAdd(block, KeyList + 160);
     _invShiftRows(block);
@@ -79,6 +69,9 @@ void XorI32(unsigned char* op1, unsigned char* op2, unsigned char* dest){
 }
 
 void KeyScheduler(unsigned char* MasterKey, unsigned char* dest){
+    /*
+    MasterKey is 16 bytes long, dest should be 176 bytes long, since it has 11 keys in it
+    */
     unsigned char tmp[16];
     unsigned char scratch[16];
     unsigned char G_storage[4] = {0,0,0,0};
