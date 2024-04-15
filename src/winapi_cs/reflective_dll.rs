@@ -9,10 +9,10 @@ use std::ptr::copy;
 use winapi::shared::basetsd::DWORD_PTR;
 use winapi::shared::basetsd::SIZE_T;
 use winapi::shared::minwindef::HINSTANCE;
-use winapi::shared::minwindef::{BYTE, DWORD, FARPROC, HINSTANCE__, HMODULE, ULONG, WORD};
-use winapi::shared::ntdef::{HANDLE, LPCSTR, LPCWSTR, NULL, PVOID, ULONGLONG, UNICODE_STRING};
-use winapi::um::errhandlingapi::GetLastError;
-use winapi::um::errhandlingapi::SetLastError;
+use winapi::shared::minwindef::{BYTE, DWORD, HMODULE};
+use winapi::shared::ntdef::{LPCSTR, PVOID};
+
+
 use winapi::um::libloaderapi::GetProcAddress;
 use winapi::um::libloaderapi::LoadLibraryA;
 use winapi::um::winnt::DLL_PROCESS_ATTACH;
@@ -22,7 +22,7 @@ use winapi::um::winnt::IMAGE_THUNK_DATA64;
 use winapi::um::winnt::MEM_COMMIT;
 use winapi::um::winnt::MEM_RESERVE;
 use winapi::um::winnt::PAGE_EXECUTE_READWRITE;
-use winapi::um::winuser::MAKEINTRESOURCEA;
+
 
 type pVirtualAlloc = fn(PVOID, SIZE_T, DWORD, DWORD) -> *mut BYTE;
 type pDllEntry = extern "system" fn(HINSTANCE, DWORD, PVOID) -> bool;
@@ -69,7 +69,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
     };
     dllBase = if (dllBase as usize) % 0x1000 != 0 {
         // Adjust `dllBase` to the next multiple of 0x1000
-        ((dllBase as usize + 0x1000 - (dllBase as usize) % 0x1000) as *mut u8)
+        (dllBase as usize + 0x1000 - (dllBase as usize) % 0x1000) as *mut u8
     } else {
         // If no adjustment is needed, just reuse the old value
         dllBase
@@ -113,9 +113,9 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
                     continue;
                 }
 
-                let patchAddress = (dllBase as usize
+                let patchAddress = dllBase as usize
                     + (*relocationBlock).PageAddress as usize
-                    + ((*entry).offset() as usize));
+                    + ((*entry).offset() as usize);
                 let valueAtAddress = patchAddress as *mut u32;
                 *valueAtAddress = (*valueAtAddress) + (deltaImageBase as u32);
             }

@@ -2,28 +2,26 @@ mod asm_macros;
 mod winapi_cs;
 
 use std::arch::asm;
-use std::collections::HashSet;
+
 use std::mem::{transmute, transmute_copy};
-use std::ptr::{null, null_mut, read_volatile, write_volatile};
-use std::sync::atomic::{compiler_fence, AtomicUsize, Ordering};
+use std::ptr::null_mut;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
+
 use std::{io, thread};
 use winapi::shared::basetsd::SIZE_T;
-use winapi::shared::minwindef::{BYTE, DWORD, HMODULE, HRSRC__, LPARAM};
+use winapi::shared::minwindef::{BYTE, DWORD, HMODULE};
 use winapi::shared::ntdef::{LPCSTR, NTSTATUS, PVOID};
-use winapi::um::errhandlingapi::{AddVectoredExceptionHandler, GetLastError};
-use winapi::um::libloaderapi::{
-    FindResourceExW, GetModuleHandleW, GetProcAddress, LoadResource, LockResource, SizeofResource,
-};
+use winapi::um::errhandlingapi::AddVectoredExceptionHandler;
+
 use winapi::um::processenv::GetStdHandle;
 use winapi::um::synchapi::WaitForSingleObject;
-use winapi::um::winbase::{EnumResourceNamesA, STD_OUTPUT_HANDLE};
+use winapi::um::winbase::STD_OUTPUT_HANDLE;
 use winapi::um::winnt::{
-    EXCEPTION_POINTERS, HANDLE, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
-    PTP_CALLBACK_ENVIRON, PTP_WORK, PTP_WORK_CALLBACK,
+    EXCEPTION_POINTERS, HANDLE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, PTP_CALLBACK_ENVIRON,
+    PTP_WORK, PTP_WORK_CALLBACK,
 };
-use winapi::um::winuser::{MAKEINTRESOURCEW, RT_RCDATA};
+
 use winapi::vc::excpt::{EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH};
 use winapi_cs::core::*;
 
@@ -69,8 +67,8 @@ unsafe fn warden(_status: u64, _workAddress: u64) {
     let (_DRemoteStr, pDRemoteStr) = string_to_lpcstr(String::from("RtlUserThreadStart"));
     let _kernel32: HMODULE = GetModuleHandle(pker32strw).unwrap();
     let VirtualProtect: pVirtualProtect = GetProcAddress_(_kernel32, pvirtProtStr).unwrap();
-    let mut Cstatus: *mut u64 = GetProcAddress_(ntdll, pDBreakStr).unwrap();
-    let mut CworkAddress: *mut *const u8 = GetProcAddress_(ntdll, pDRemoteStr).unwrap();
+    let Cstatus: *mut u64 = GetProcAddress_(ntdll, pDBreakStr).unwrap();
+    let CworkAddress: *mut *const u8 = GetProcAddress_(ntdll, pDRemoteStr).unwrap();
     let mut _oldProtect: DWORD = 0;
     VirtualProtect(
         Cstatus as PVOID,
@@ -185,7 +183,7 @@ typedef VOID (NTAPI* TPRELEASEWORK)(PTP_WORK);*/
 
 fn main() {
     //{7h3_h4nd_0f_90d_h0v321n9_480v3}
-
+    fake_exit!();
     let (_ker32strw, pker32strw) =
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
     let (_virtProtStr, pvirtProtStr) = string_to_lpcstr(String::from("VirtualProtect"));
@@ -193,15 +191,15 @@ fn main() {
     let (_writeConsStr, pWriteConsStr) = string_to_lpcstr(String::from("WriteConsoleA"));
 
     unsafe {
-        //hide!();
+        hide!();
         let _kernel32: HMODULE = GetModuleHandle(pker32strw).unwrap();
         let aes_ptr = include_bytes!("../c_aes/aes_dll_nocrt.dll");
         let VirtualProtect: pVirtualProtect = GetProcAddress_(_kernel32, pvirtProtStr).unwrap();
         let WriteConsole: pWriteConsole = GetProcAddress_(_kernel32, pWriteConsStr).unwrap();
         let verif_data_sec = include_bytes!("../c_verification/mod2.dll.enc");
         let mut _oldProtect: DWORD = 0;
-        let mut data = Arc::new((Mutex::new(0 as u64), Condvar::new()));
-        let mut status = Arc::new((Mutex::new(StatusEnum::Idle), Condvar::new()));
+        let data = Arc::new((Mutex::new(0 as u64), Condvar::new()));
+        let status = Arc::new((Mutex::new(StatusEnum::Idle), Condvar::new()));
         VirtualProtect(
             verif_data_sec.as_ptr() as PVOID,
             verif_data_sec.len() * 2,
@@ -218,6 +216,7 @@ fn main() {
         }
         let mut data_th2 = data.clone();
         let mut status_th2 = status.clone();
+        fake_exit!();
         let mut wa = warden_args {
             f: warden as *const fn(),
             status: &mut status_th2 as *mut Arc<(Mutex<StatusEnum>, Condvar)>,
@@ -233,8 +232,9 @@ fn main() {
         let console = GetStdHandle(STD_OUTPUT_HANDLE);
         let (status_lock, cvar) = &*status;
         for i in 0..(verif_data_sec.len() / 16) {
-            let (ds, pds) = string_to_lpcstr(String::from(format!("{i}")));
+            let (_ds, pds) = string_to_lpcstr(String::from(format!("{i}")));
             let mut cnt: DWORD = 0;
+            fake_exit!();
             WriteConsole(console, pds, 0, &mut cnt as *mut u32, null_mut());
             let data_ptr = verif_data_sec.as_ptr().offset(i as isize * 16) as *const u8;
             {
@@ -248,6 +248,7 @@ fn main() {
             }
             cvar.notify_one();
             {
+                hide!();
                 let mut status_mutex = status_lock.lock().unwrap();
                 status_mutex = match *status_mutex {
                     StatusEnum::Work => cvar.wait(status_mutex).unwrap(),
@@ -256,7 +257,7 @@ fn main() {
             }
         }
 
-        let mut data_ptr = puserStr as *const u8;
+        let data_ptr = puserStr as *const u8;
         {
             let mut work_mutex = data_lock.lock().unwrap();
             *work_mutex = transmute::<*const *const u8, u64>(&data_ptr as *const *const u8);
@@ -273,6 +274,8 @@ fn main() {
                 _ => status_mutex,
             };
         }
+        hide!();
+        fake_exit!();
         ReflectiveLoadDll(verif_data_sec.as_ptr() as *mut u8, false);
     }
 }
