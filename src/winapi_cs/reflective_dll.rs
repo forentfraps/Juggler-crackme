@@ -37,7 +37,6 @@ fn image_first_section(ntheader: *const IMAGE_NT_HEADERS64) -> *const IMAGE_SECT
     }
 }
 pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut BYTE> {
-    println!("Enter reflective");
     let dosHeaders = dllBytes as *const IMAGE_DOS_HEADER;
     let ntHeaders =
         dllBytes.wrapping_offset((*dosHeaders).e_lfanew as isize) as *const IMAGE_NT_HEADERS64;
@@ -76,12 +75,10 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
         dllBase
     };
     let deltaImageBase = dllBase as usize - (*ntHeaders).OptionalHeader.ImageBase as usize;
-    println!("Copying");
     copy(dllBytes, dllBase, dllImageSize as usize);
     let mut section = image_first_section(ntHeaders);
     let mut sectionDestination;
     let mut sectionBytes;
-    println!("problem");
     for _ in 0..(*ntHeaders).FileHeader.NumberOfSections {
         sectionDestination = ((dllBase as usize) + (*section).VirtualAddress as usize) as *mut u8;
         sectionBytes = ((dllBytes as usize) + (*section).PointerToRawData as usize) as *mut u8;
@@ -93,7 +90,6 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
         );
         section = section.offset(1);
     }
-    println!("safe from crash");
     let relocationTable = (((*ntHeaders).OptionalHeader.DataDirectory[5]).VirtualAddress
         as DWORD_PTR)
         + dllBase as usize;

