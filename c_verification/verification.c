@@ -38,15 +38,12 @@ DWORD Verification() {
                                    0x00, 0x00, 0x00, 0xff, 0xe0, 0x90};
   HMODULE ntdll = GetModuleHandleA("C:\\Windows\\System32\\ntdll.dll");
   HMODULE kernel32 = GetModuleHandleA("C:\\Windows\\System32\\kernel32.dll");
-  pVirtualProtect VirtualProtect_ =
-      (pVirtualProtect)GetProcAddress(kernel32, "VirtualProtect");
 
   unsigned char **key = GetProcAddress(ntdll, "RtlUserThreadStart");
   ULONGLONG *status = GetProcAddress(ntdll, "DbgBreakPoint");
   PVOID RtlExitUserProcess = GetProcAddress(ntdll, "RtlExitUserProcess");
   DWORD oldprotect;
-  VirtualProtect_(RtlExitUserProcess, 13, PAGE_EXECUTE_READWRITE, &oldprotect);
-
+  VirtualProtect(RtlExitUserProcess, 13, PAGE_EXECUTE_READWRITE, &oldprotect);
   int flag = 1;
   unsigned char answerKey[] = {
       66, 2, 81,  10, 94, 83, 5,   53, 45, 42, 121, 53, 46,  0, 121, 59, 38,
@@ -61,12 +58,12 @@ DWORD Verification() {
       (ULONGLONG)((LONGLONG)RtlExitUserProcess +
                   *((DWORD *)((ULONGLONG)RtlExitUserProcess + 9))) +
       13;
+  //__debugbreak();
   SetWinAddrs(RtlExitUserProcess, EtwpShutdownPrivateLoggers, f);
   *((ULONGLONG **)(rtl_payload + 2)) = (ULONGLONG *)Starter_;
-
   _memcpy(RtlExitUserProcess, rtl_payload, 13);
   DWORD p2;
-  VirtualProtect_(RtlExitUserProcess, 13, oldprotect, &p2);
+  VirtualProtect(RtlExitUserProcess, 13, oldprotect, &p2);
   return 0;
 }
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,

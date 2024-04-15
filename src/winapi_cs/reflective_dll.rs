@@ -4,6 +4,7 @@ use super::core::*;
 use super::utils::*;
 use std::arch::asm;
 use std::mem;
+use std::mem::size_of;
 use std::ptr::copy;
 use winapi::shared::basetsd::DWORD_PTR;
 use winapi::shared::basetsd::SIZE_T;
@@ -35,7 +36,8 @@ fn image_first_section(ntheader: *const IMAGE_NT_HEADERS64) -> *const IMAGE_SECT
             as *const IMAGE_SECTION_HEADER
     }
 }
-pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
+pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut BYTE> {
+    println!("Enter reflective");
     let dosHeaders = dllBytes as *const IMAGE_DOS_HEADER;
     let ntHeaders =
         dllBytes.wrapping_offset((*dosHeaders).e_lfanew as isize) as *const IMAGE_NT_HEADERS64;
@@ -48,30 +50,38 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
         None => return None,
     };
     let VirtualAlloc: pVirtualAlloc = std::mem::transmute(GetProcAddress(kernel32, pvirtAllocStr));
-    let mut dllBase = VirtualAlloc(
+    let temp = VirtualAlloc(
         (*ntHeaders).OptionalHeader.ImageBase,
-        dllImageSize as usize,
+        dllImageSize as usize + 0x1000,
         MEM_RESERVE | MEM_COMMIT,
         PAGE_EXECUTE_READWRITE,
     );
-    if dllBase == 0 as *mut u8 {
-        let mut dllBase = VirtualAlloc(
-            0 as PVOID,
-            dllImageSize as usize + 16,
-            MEM_RESERVE | MEM_COMMIT,
-            PAGE_EXECUTE_READWRITE,
-        );
-        if dllBase as usize % 16 != 0 {
-            dllBase =
-                (dllBase as usize + 16 - dllBase as usize - (dllBase as usize % 16)) as *mut u8;
+    let mut dllBase = {
+        if temp == 0 as *mut u8 {
+            VirtualAlloc(
+                0 as PVOID,
+                dllImageSize as usize + 0x1000,
+                MEM_RESERVE | MEM_COMMIT,
+                PAGE_EXECUTE_READWRITE,
+            )
+        } else {
+            temp
         }
-    }
-
+    };
+    dllBase = if (dllBase as usize) % 0x1000 != 0 {
+        // Adjust `dllBase` to the next multiple of 0x1000
+        ((dllBase as usize + 0x1000 - (dllBase as usize) % 0x1000) as *mut u8)
+    } else {
+        // If no adjustment is needed, just reuse the old value
+        dllBase
+    };
     let deltaImageBase = dllBase as usize - (*ntHeaders).OptionalHeader.ImageBase as usize;
+    println!("Copying");
     copy(dllBytes, dllBase, dllImageSize as usize);
     let mut section = image_first_section(ntHeaders);
     let mut sectionDestination;
     let mut sectionBytes;
+    println!("problem");
     for _ in 0..(*ntHeaders).FileHeader.NumberOfSections {
         sectionDestination = ((dllBase as usize) + (*section).VirtualAddress as usize) as *mut u8;
         sectionBytes = ((dllBytes as usize) + (*section).PointerToRawData as usize) as *mut u8;
@@ -83,32 +93,39 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
         );
         section = section.offset(1);
     }
+    println!("safe from crash");
     let relocationTable = (((*ntHeaders).OptionalHeader.DataDirectory[5]).VirtualAddress
         as DWORD_PTR)
         + dllBase as usize;
     let mut relocationProcessed: u32 = 0;
-    while relocationProcessed < ((*ntHeaders).OptionalHeader.DataDirectory[5]).Size {
-        let relocationBlock =
-            (relocationTable + relocationProcessed as usize) as *const BASE_RELOCATION_BLOCK;
-        let blockSize = (*relocationBlock).BlockSize as usize;
-        let entryCount = (blockSize - std::mem::size_of::<BASE_RELOCATION_BLOCK>())
-            / std::mem::size_of::<BASE_RELOCATION_ENTRY>();
+    if deltaImageBase > 0 {
+        while relocationProcessed < ((*ntHeaders).OptionalHeader.DataDirectory[5]).Size {
+            let relocationBlock =
+                (relocationTable + relocationProcessed as usize) as *const BASE_RELOCATION_BLOCK;
+            let blockSize = (*relocationBlock).BlockSize as usize;
+            let entryCount = (blockSize - std::mem::size_of::<BASE_RELOCATION_BLOCK>())
+                / std::mem::size_of::<BASE_RELOCATION_ENTRY>();
 
-        let relocationEntries = relocationBlock.offset(1) as *const BASE_RELOCATION_ENTRY; // Immediately after the block
+            let relocationEntries = (relocationBlock as usize
+                + std::mem::size_of::<BASE_RELOCATION_BLOCK>())
+                as *const BASE_RELOCATION_ENTRY;
 
-        for i in 0..entryCount as isize {
-            let entry = relocationEntries.offset(i);
-            if (*entry).type_() == 0 {
-                continue;
+            for i in 0..entryCount {
+                let entry = (relocationEntries as usize + size_of::<BASE_RELOCATION_ENTRY>() * i)
+                    as *const BASE_RELOCATION_ENTRY;
+                if (*entry).type_() == 0 {
+                    continue;
+                }
+
+                let patchAddress = (dllBase as usize
+                    + (*relocationBlock).PageAddress as usize
+                    + ((*entry).offset() as usize));
+                let valueAtAddress = patchAddress as *mut u32;
+                *valueAtAddress = (*valueAtAddress) + (deltaImageBase as u32);
             }
 
-            let patchAddress = dllBase
-                .offset((*relocationBlock).PageAddress as isize + ((*entry).offset() as isize));
-            let valueAtAddress = patchAddress as *mut u32;
-            *valueAtAddress = (*valueAtAddress) + (deltaImageBase as u32);
+            relocationProcessed += blockSize as u32;
         }
-
-        relocationProcessed += blockSize as u32;
     }
     let mut importDescriptor = (dllBase
         .offset((*ntHeaders).OptionalHeader.DataDirectory[1].VirtualAddress as isize))
@@ -144,8 +161,9 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
     }
     let entry_point_rva = (*ntHeaders).OptionalHeader.AddressOfEntryPoint as isize;
     let DllEntry: pDllEntry = std::mem::transmute(dllBase.offset(entry_point_rva));
-
-    //asm!("int 3");
+    if debug {
+        asm!("int 3");
+    }
     DllEntry(dllBase as HINSTANCE, DLL_PROCESS_ATTACH, 0 as PVOID);
     Some(dllBase)
 }

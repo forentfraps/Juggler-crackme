@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 extern "C" {
     pub fn appendByte2Rip();
-
 }
 #[macro_export]
 macro_rules! hide {

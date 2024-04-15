@@ -2,6 +2,8 @@
 #include <Windows.h>
 #include <synchapi.h>
 
+extern void stub();
+
 int __declspec(noinline)
     EventLoop(unsigned char *keyArray, ULONGLONG volatile *status,
               PVOID *workAddress) {
@@ -30,9 +32,10 @@ DWORD WINAPI Initialise() {
   }
   unsigned char *keyArray = HeapAlloc(GetProcessHeap(), 0, 176);
   KeyScheduler(masterKey, keyArray);
-  while (*status != 0 && *status != 1) {
-    Sleep(1);
+  while (*status != 0) {
   }
+  *workAddress = (PVOID)1;
+
   EventLoop(keyArray, status, workAddress);
   return 0;
 }

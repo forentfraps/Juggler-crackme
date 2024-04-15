@@ -8,32 +8,26 @@ section .data
 section .text
 align 16
   SetWinAddrs:
-    mov rax, rtl
-    mov [rax], rcx
-    mov rax, etwp
-    mov [rax], rdx
-    mov rax, f
-    mov [rax], r8
+    mov [rel rtl], rcx
+    mov [rel etwp], rdx
+    mov [rel f], r8
 
     ret
 align 16
   Catalyst:
-    mov rax, rtl
-    mov rax, [rax]
+    mov rax, [rel rtl]
     add rax, 0xd
     push rbx
     sub rsp, 0x20
     push rax
-    mov rax, etwp
-    mov rax, [rax] 
+    mov rax, [rel etwp] 
     xor ecx, ecx
     jmp rax
     ret
 
 align 16
   Starter:
-        mov rax, f
-    mov rax, [rax]
+    mov rax, [rel f]
     call rax
         jmp Catalyst
     ret 

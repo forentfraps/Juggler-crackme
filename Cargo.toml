@@ -6,7 +6,10 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winapi = { version = "0.3", features = ["libloaderapi", "memoryapi", "winnt", "minwindef", "winbase", "winuser", "errhandlingapi"] }
+winapi = { version = "0.3", features = ["libloaderapi", "memoryapi","processenv",  "winnt", "minwindef", "winbase", "winuser", "errhandlingapi", "synchapi"] }
 crc32fast = "1.2.1"
 [build-dependencies]
 embed-resource = "1.6.1"
+
+[profile.dev]
+opt-level = 3
