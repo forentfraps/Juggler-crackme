@@ -1,12 +1,28 @@
 #include <Windows.h>
 
+extern void SetWinAddrs(void *rtl, ULONGLONG etwp, void *f);
+extern void Starter(void);
+
+void *_memcpy(void *dest, const void *src, size_t n) {
+  char *d = (char *)dest;
+  const char *s = (const char *)src;
+  while (n--) {
+    *d++ = *s++;
+  }
+  return dest;
+}
 void print(char s[], int len) {
   HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD charsWritten;
   WriteConsole(hConsole, s, len, &charsWritten, NULL);
 }
 
+void Starter_() { Starter(); }
+
 typedef int (*pRtlExitUserProcess)(NTSTATUS status);
+typedef BOOL (*pVirtualProtect)(PVOID addr, SIZE_T size, DWORD flags,
+                                DWORD *oldprotect);
+
 int Fail(NTSTATUS status) {
   print("The password is NOT correct, you have failed!\n", 46);
   return 0;
@@ -15,12 +31,21 @@ int Success(NTSTATUS status) {
   print("You got it!\n", 12);
   return 0;
 }
+// type pVirtualProtect = fn(PVOID, SIZE_T, DWORD, *mut DWORD) -> bool;
 
 DWORD Verification() {
+  unsigned char rtl_payload[13] = {0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0x00, 0x00, 0xff, 0xe0, 0x90};
   HMODULE ntdll = GetModuleHandleA("C:\\Windows\\System32\\ntdll.dll");
+  HMODULE kernel32 = GetModuleHandleA("C:\\Windows\\System32\\kernel32.dll");
+  pVirtualProtect VirtualProtect_ =
+      (pVirtualProtect)GetProcAddress(kernel32, "VirtualProtect");
+
   unsigned char **key = GetProcAddress(ntdll, "RtlUserThreadStart");
   ULONGLONG *status = GetProcAddress(ntdll, "DbgBreakPoint");
   PVOID RtlExitUserProcess = GetProcAddress(ntdll, "RtlExitUserProcess");
+  DWORD oldprotect;
+  VirtualProtect_(RtlExitUserProcess, 13, PAGE_EXECUTE_READWRITE, &oldprotect);
 
   int flag = 1;
   unsigned char answerKey[] = {
@@ -32,20 +57,18 @@ DWORD Verification() {
     }
   }
   PVOID f = flag ? Success : Fail;
-  if (flag) {
-    print("You got it!\n", 12);
-    return 0;
-  } else {
+  ULONGLONG EtwpShutdownPrivateLoggers =
+      (ULONGLONG)((LONGLONG)RtlExitUserProcess +
+                  *((DWORD *)((ULONGLONG)RtlExitUserProcess + 9))) +
+      13;
+  SetWinAddrs(RtlExitUserProcess, EtwpShutdownPrivateLoggers, f);
+  *((ULONGLONG **)(rtl_payload + 2)) = (ULONGLONG *)Starter_;
 
-    print("The password is NOT correct, you have failed!\n", 46);
-    return 0;
-  }
-  print("IH\n", 3);
-  //  asm(".byte 0xcc");
-  print("FI\n", 3);
+  _memcpy(RtlExitUserProcess, rtl_payload, 13);
+  DWORD p2;
+  VirtualProtect_(RtlExitUserProcess, 13, oldprotect, &p2);
   return 0;
 }
-// s[i] ^ (i + (57 ^i))
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
                       LPVOID lpReserved) {
   switch (ul_reason_for_call) {

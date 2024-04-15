@@ -123,12 +123,7 @@ unsafe extern "system" fn exception_handler(_exception_info: *mut *mut u32) -> i
 type pVirtualAlloc = fn(PVOID, SIZE_T, DWORD, DWORD) -> *mut BYTE;
 type pVirtualProtect = fn(PVOID, SIZE_T, DWORD, *mut DWORD) -> bool;
 fn main() {
-    let status = Arc::new(Mutex::new(false)); // Shared boolean status
-    let number = Arc::new(Mutex::new(0u64)); // Shared u64 number
-
-    // Clone Arcs for the second thread
-    let status_clone = Arc::clone(&status);
-    let number_clone = Arc::clone(&number);
+    //{7h3_h4nd_0f_90d_h0v321n9_480v3}
 
     let (_ker32strw, pker32strw) =
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));

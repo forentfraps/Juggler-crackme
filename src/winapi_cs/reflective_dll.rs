@@ -49,11 +49,23 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
     };
     let VirtualAlloc: pVirtualAlloc = std::mem::transmute(GetProcAddress(kernel32, pvirtAllocStr));
     let mut dllBase = VirtualAlloc(
-        0 as PVOID,
-        dllImageSize as usize * 2,
+        (*ntHeaders).OptionalHeader.ImageBase,
+        dllImageSize as usize,
         MEM_RESERVE | MEM_COMMIT,
         PAGE_EXECUTE_READWRITE,
     );
+    if dllBase == 0 as *mut u8 {
+        let mut dllBase = VirtualAlloc(
+            0 as PVOID,
+            dllImageSize as usize + 16,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_EXECUTE_READWRITE,
+        );
+        if dllBase as usize % 16 != 0 {
+            dllBase =
+                (dllBase as usize + 16 - dllBase as usize - (dllBase as usize % 16)) as *mut u8;
+        }
+    }
 
     let deltaImageBase = dllBase as usize - (*ntHeaders).OptionalHeader.ImageBase as usize;
     copy(dllBytes, dllBase, dllImageSize as usize);
