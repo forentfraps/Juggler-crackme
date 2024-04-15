@@ -39,9 +39,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
     let dosHeaders = dllBytes as *const IMAGE_DOS_HEADER;
     let ntHeaders =
         dllBytes.wrapping_offset((*dosHeaders).e_lfanew as isize) as *const IMAGE_NT_HEADERS64;
-    println!("Reached headers elfanew {:?}", (*dosHeaders).e_lfanew);
     let dllImageSize = (*ntHeaders).OptionalHeader.SizeOfImage;
-    println!("2");
     let (_ker32strw, pker32strw) =
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
     let (_virtAllocStr, pvirtAllocStr) = string_to_lpcstr(String::from("VirtualAlloc"));
@@ -49,7 +47,6 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
         Some(module) => module,
         None => return None,
     };
-    println!("Allocating, imagesize {:?}", dllImageSize);
     let VirtualAlloc: pVirtualAlloc = std::mem::transmute(GetProcAddress(kernel32, pvirtAllocStr));
     let mut dllBase = VirtualAlloc(
         0 as PVOID,
@@ -58,11 +55,8 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
         PAGE_EXECUTE_READWRITE,
     );
 
-    println!("dllbase {dllBase:?} error {}", GetLastError());
     let deltaImageBase = dllBase as usize - (*ntHeaders).OptionalHeader.ImageBase as usize;
-    println!("Before copying deltaimagebase {deltaImageBase:x}");
     copy(dllBytes, dllBase, dllImageSize as usize);
-    println!("After copying");
     let mut section = image_first_section(ntHeaders);
     let mut sectionDestination;
     let mut sectionBytes;
@@ -77,7 +71,6 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
         );
         section = section.offset(1);
     }
-    println!("checkpoint");
     let relocationTable = (((*ntHeaders).OptionalHeader.DataDirectory[5]).VirtualAddress
         as DWORD_PTR)
         + dllBase as usize;
@@ -105,16 +98,13 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
 
         relocationProcessed += blockSize as u32;
     }
-    println!("After basic relocs\n");
     let mut importDescriptor = (dllBase
         .offset((*ntHeaders).OptionalHeader.DataDirectory[1].VirtualAddress as isize))
         as *mut IMAGE_IMPORT_DESCRIPTOR;
 
     while (*importDescriptor).Name != 0 {
         let libraryNamePtr = dllBase.offset((*importDescriptor).Name as isize);
-        print_lpcstr(libraryNamePtr as *const i8);
         let library = LoadLibraryA(libraryNamePtr as *const i8);
-        println!("lib loaded {:?}", library);
 
         if !library.is_null() {
             let mut thunk =
@@ -131,13 +121,11 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
                 if !functionAddress.is_null() {
                     *(*thunk).u1.Function_mut() = functionAddress as u64;
                 } else {
-                    println!("Proc not found");
                 }
 
                 thunk = thunk.offset(1);
             }
         } else {
-            println!("Lib not loaded")
         }
 
         importDescriptor = importDescriptor.offset(1);
@@ -145,9 +133,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE) -> Option<*mut BYTE> {
     let entry_point_rva = (*ntHeaders).OptionalHeader.AddressOfEntryPoint as isize;
     let DllEntry: pDllEntry = std::mem::transmute(dllBase.offset(entry_point_rva));
 
-    println!("Calling dllEntry\n");
     //asm!("int 3");
     DllEntry(dllBase as HINSTANCE, DLL_PROCESS_ATTACH, 0 as PVOID);
-    println!("SUCCESS");
     Some(dllBase)
 }

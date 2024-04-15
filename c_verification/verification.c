@@ -1,4 +1,4 @@
-#include "lib_hook/winhook.h"
+#include <Windows.h>
 
 void print(char s[], int len) {
   HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -8,20 +8,15 @@ void print(char s[], int len) {
 
 typedef int (*pRtlExitUserProcess)(NTSTATUS status);
 int Fail(NTSTATUS status) {
-  pRtlExitUserProcess f;
-  GVA(&f);
   print("The password is NOT correct, you have failed!\n", 46);
-  return f(status);
+  return 0;
 }
 int Success(NTSTATUS status) {
-  pRtlExitUserProcess f;
-  GVA(&f);
   print("You got it!\n", 12);
-  return f(status);
+  return 0;
 }
 
 DWORD Verification() {
-  HookInfo h;
   HMODULE ntdll = GetModuleHandleA("C:\\Windows\\System32\\ntdll.dll");
   unsigned char **key = GetProcAddress(ntdll, "RtlUserThreadStart");
   ULONGLONG *status = GetProcAddress(ntdll, "DbgBreakPoint");
@@ -47,7 +42,6 @@ DWORD Verification() {
   }
   print("IH\n", 3);
   //  asm(".byte 0xcc");
-  InstallHook(RtlExitUserProcess, f, &h);
   print("FI\n", 3);
   return 0;
 }

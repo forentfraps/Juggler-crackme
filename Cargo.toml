@@ -8,6 +8,5 @@ build = "build.rs"
 [dependencies]
 winapi = { version = "0.3", features = ["libloaderapi", "memoryapi", "winnt", "minwindef", "winbase", "winuser", "errhandlingapi"] }
 crc32fast = "1.2.1"
-
 [build-dependencies]
 embed-resource = "1.6.1"
