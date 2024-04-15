@@ -1,15 +1,10 @@
 #include "aes_lib/aes.h"
 #include <Windows.h>
+#include <synchapi.h>
 
-void print(char s[], int len) {
-  HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-  DWORD charsWritten;
-  WriteConsole(hConsole, s, len, &charsWritten, NULL);
-}
-
-int EventLoop(unsigned char *keyArray, volatile ULONGLONG *status,
+int __declspec(noinline)
+    EventLoop(unsigned char *keyArray, ULONGLONG volatile *status,
               PVOID *workAddress) {
-
   while (1) {
     if (*status != 0) {
       if (*status == 2) {
@@ -27,16 +22,16 @@ DWORD WINAPI Initialise() {
   // the most graceful exit anyone can hope for.
   // Everything will just collapse, gracefully, obviously
   HMODULE ntdll = GetModuleHandleA("C:\\Windows\\System32\\ntdll.dll");
-  ULONGLONG *status = GetProcAddress(ntdll, "DbgBreakPoint");
+  ULONGLONG volatile *status = GetProcAddress(ntdll, "DbgBreakPoint");
   PVOID *workAddress = GetProcAddress(ntdll, "RtlUserThreadStart");
   unsigned char *masterKey = HeapAlloc(GetProcessHeap(), 0, 16);
-  for (int i = 0; i < 16; ++i) {
+  for (unsigned char i = 0; i < 16; ++i) {
     masterKey[i] = ((i ^ (i + 127)) | 60) - 60;
   }
   unsigned char *keyArray = HeapAlloc(GetProcessHeap(), 0, 176);
   KeyScheduler(masterKey, keyArray);
-  while (*((ULONGLONG *)status) != 0) {
-    Sleep(20);
+  while (*status != 0 && *status != 1) {
+    Sleep(1);
   }
   EventLoop(keyArray, status, workAddress);
   return 0;
