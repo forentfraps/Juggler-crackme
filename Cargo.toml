@@ -12,4 +12,8 @@ crc32fast = "1.2.1"
 embed-resource = "1.6.1"
 
 [profile.dev]
-opt-level = 3
+opt-level = 0
+
+[profile.release]
+opt-level = "z"
+strip = true  # Automatically strip symbols from the binary.

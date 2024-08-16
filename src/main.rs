@@ -1,28 +1,26 @@
 //{7h3_h4nd_0f_90d_h0v321n9_480v3}
-
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+#![allow(unused_unsafe)]
 mod asm_macros;
 mod warden;
 mod winapi_cs;
 
 use std::arch::asm;
 
-use std::mem::{transmute, transmute_copy};
+use std::mem::transmute;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use std::{io, thread};
+use std::io;
 use winapi::shared::basetsd::SIZE_T;
-use winapi::shared::minwindef::{BYTE, DWORD, HMODULE};
-use winapi::shared::ntdef::{LPCSTR, NTSTATUS, PVOID};
+use winapi::shared::minwindef::{DWORD, HMODULE};
+use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::um::errhandlingapi::AddVectoredExceptionHandler;
 
-use winapi::um::processenv::GetStdHandle;
 use winapi::um::synchapi::WaitForSingleObject;
-use winapi::um::winbase::STD_OUTPUT_HANDLE;
 use winapi::um::winnt::{
-    EXCEPTION_POINTERS, HANDLE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, PTP_CALLBACK_ENVIRON,
-    PTP_WORK, PTP_WORK_CALLBACK,
+    EXCEPTION_POINTERS, PAGE_READWRITE, PTP_CALLBACK_ENVIRON, PTP_WORK, PTP_WORK_CALLBACK,
 };
 
 use winapi::vc::excpt::{EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH};
@@ -30,6 +28,7 @@ use winapi_cs::core::*;
 
 use crate::winapi_cs::reflective_dll::*;
 
+#[allow(non_upper_case_globals)]
 static mut stWA: u64 = 0;
 unsafe extern "system" fn exception_handler(_exception_info: *mut EXCEPTION_POINTERS) -> i32 {
     // Return EXCEPTION_CONTINUE_SEARCH to allow other handlers to process this exception,
@@ -64,12 +63,10 @@ unsafe extern "system" fn exception_handler(_exception_info: *mut EXCEPTION_POIN
     EXCEPTION_CONTINUE_EXECUTION
 }
 
-type pVirtualAlloc = fn(PVOID, SIZE_T, DWORD, DWORD) -> *mut BYTE;
 type pVirtualProtect = fn(PVOID, SIZE_T, DWORD, *mut DWORD) -> bool;
 type pTpAllocWork = fn(*mut PTP_WORK, PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON) -> NTSTATUS;
 type pTpPostWork = fn(PTP_WORK);
 type pTpReleaseWork = fn(PTP_WORK);
-type pWriteConsole = fn(HANDLE, LPCSTR, DWORD, *mut DWORD, PVOID);
 /* typedef NTSTATUS (NTAPI* TPALLOCWORK)(PTP_WORK* ptpWrk, PTP_WORK_CALLBACK pfnwkCallback, PVOID OptionalArg,
 * PTP_CALLBACK_ENVIRON CallbackEnvironment);
 typedef VOID (NTAPI* TPPOSTWORK)(PTP_WORK);
@@ -81,14 +78,11 @@ fn main() {
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
     let (_virtProtStr, pvirtProtStr) = string_to_lpcstr(String::from("VirtualProtect"));
 
-    let (_writeConsStr, pWriteConsStr) = string_to_lpcstr(String::from("WriteConsoleA"));
-
     unsafe {
         hide!();
         let _kernel32: HMODULE = GetModuleHandle(pker32strw).unwrap();
         let aes_ptr = include_bytes!("../c_aes/aes_dll_nocrt.dll");
         let VirtualProtect: pVirtualProtect = GetProcAddress_(_kernel32, pvirtProtStr).unwrap();
-        let WriteConsole: pWriteConsole = GetProcAddress_(_kernel32, pWriteConsStr).unwrap();
         let verif_data_sec = include_bytes!("../c_verification/mod2.dll.enc");
         let mut _oldProtect: DWORD = 0;
         let condvar = Condvar::new();
@@ -122,13 +116,12 @@ fn main() {
         let (_userStr, puserStr) = string_to_lpcstr(user_input);
         asm!(".2byte 0x04cd");
         ReflectiveLoadDll(aes_ptr.as_ptr() as *mut u8, false);
-        let console = GetStdHandle(STD_OUTPUT_HANDLE);
 
         let (data_lock, _) = &*data;
         let (status_lock, cvar) = &*status;
         {
             // Waiting for C to initialise its code
-            cvar.wait(status_lock.lock().unwrap());
+            drop(cvar.wait(status_lock.lock().unwrap()).unwrap());
         }
 
         for i in 0..(verif_data_sec.len() / 16) {
@@ -158,11 +151,11 @@ fn main() {
 
                 // Waiting while the warden is wokring
                 loop {
-                    let mut status_mutex = status_lock.lock().unwrap();
-                    status_mutex = match *status_mutex {
+                    let status_mutex = status_lock.lock().unwrap();
+                    drop(match *status_mutex {
                         warden::StatusEnum::Work => cvar.wait(status_mutex).unwrap(),
                         _ => break,
-                    };
+                    });
                 }
             }
         }
@@ -179,11 +172,11 @@ fn main() {
         }
         cvar.notify_one();
         {
-            let mut status_mutex = status_lock.lock().unwrap();
-            status_mutex = match *status_mutex {
+            let status_mutex = status_lock.lock().unwrap();
+            drop(match *status_mutex {
                 warden::StatusEnum::Phase2 => cvar.wait(status_mutex).unwrap(),
                 _ => status_mutex,
-            };
+            });
         }
         hide!();
         fake_exit!();

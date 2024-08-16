@@ -1,9 +1,10 @@
-use std::mem::{transmute, transmute_copy};
-use std::sync::atomic::{AtomicUsize, Ordering};
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+
+use std::mem::transmute;
 use std::sync::{Arc, Condvar, Mutex};
 
 use std::arch::asm;
-use std::thread;
 use winapi::shared::basetsd::SIZE_T;
 use winapi::shared::minwindef::{DWORD, HMODULE};
 use winapi::shared::ntdef::PVOID;
@@ -46,14 +47,6 @@ macro_rules! wait_for_zero {
             );
         }
     }};
-}
-static DECOY: AtomicUsize = AtomicUsize::new(0);
-unsafe extern "stdcall" fn warden_spawner(args: *mut warden_args) {
-    if DECOY.fetch_and(1, Ordering::SeqCst) == 1 {
-        let status: u64 = transmute_copy(&((*args).status));
-        let workAddress: u64 = transmute_copy(&((*args)._workAddress));
-        thread::spawn(move || warden(status, workAddress));
-    }
 }
 
 pub unsafe fn warden(_status: u64, _workAddress: u64) {

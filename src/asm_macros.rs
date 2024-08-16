@@ -5,9 +5,7 @@ extern "C" {
 #[macro_export]
 macro_rules! hide {
     () => {
-        unsafe {
-            asm!("call appendByte2Rip", ".byte 0x9a", options(nostack));
-        }
+        asm!("call appendByte2Rip", ".byte 0x9a", options(nostack));
     };
 }
 

@@ -206,6 +206,8 @@ pub struct IMAGE_IMPORT_BY_NAME {
     pub Hint: WORD,
     pub Name: [CHAR; 1],
 }
+
+#[allow(unused)]
 unsafe fn print_lpcwstr(lpcwstr: *const u16) {
     let mut len = 0;
     while *lpcwstr.offset(len) != 0 {
@@ -219,6 +221,8 @@ unsafe fn print_lpcwstr(lpcwstr: *const u16) {
         eprintln!("Failed to convert LPCWSTR to a String");
     }
 }
+
+#[allow(unused)]
 pub unsafe fn print_lpcstr(lpcstr: *const i8) {
     if lpcstr.is_null() {
         println!("Null pointer!");

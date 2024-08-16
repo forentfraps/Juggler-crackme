@@ -54,7 +54,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
         MEM_RESERVE | MEM_COMMIT,
         PAGE_EXECUTE_READWRITE,
     );
-    let mut dllBase = {
+    let dllBase = {
         if temp == 0 as *mut u8 {
             VirtualAlloc(
                 0 as PVOID,
