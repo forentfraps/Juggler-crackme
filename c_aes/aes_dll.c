@@ -4,14 +4,22 @@
 
 extern void stub();
 
-int __declspec(noinline)
-    EventLoop(unsigned char *keyArray, ULONGLONG volatile *status,
-              PVOID *workAddress) {
+HANDLE console = NULL;
+
+int __declspec(noinline) EventLoop(unsigned char *keyArray,
+                                   ULONGLONG volatile *status,
+                                   PVOID *workAddress) {
+  DWORD trash = 0;
+
   while (1) {
     if (*status != 0) {
       if (*status == 2) {
+
+        // WriteConsole(console, "[C] STOPPED ENCRYPT\n", 22, &trash, NULL);
         return 0;
       }
+
+      // WriteConsole(console, "[C] DECRYPTED BLOCK\n", 22, &trash, NULL);
       Decrypt(*workAddress, keyArray);
       *status = 0;
     }
@@ -35,6 +43,8 @@ DWORD WINAPI Initialise() {
   while (*status != 0) {
   }
   *workAddress = (PVOID)1;
+  DWORD trash = 0;
+  // WriteConsole(console, "[C] INIT COMPLETE\n", 18, &trash, NULL);
 
   EventLoop(keyArray, status, workAddress);
   return 0;
@@ -43,6 +53,7 @@ DWORD WINAPI Initialise() {
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
   switch (fdwReason) {
   case DLL_PROCESS_ATTACH:
+    console = GetStdHandle(STD_OUTPUT_HANDLE);
     CreateThread(NULL, 0, Initialise, NULL, 0, NULL);
     break;
 

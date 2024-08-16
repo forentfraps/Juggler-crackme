@@ -12,7 +12,6 @@ use winapi::shared::minwindef::HINSTANCE;
 use winapi::shared::minwindef::{BYTE, DWORD, HMODULE};
 use winapi::shared::ntdef::{LPCSTR, PVOID};
 
-
 use winapi::um::libloaderapi::GetProcAddress;
 use winapi::um::libloaderapi::LoadLibraryA;
 use winapi::um::winnt::DLL_PROCESS_ATTACH;
@@ -22,7 +21,6 @@ use winapi::um::winnt::IMAGE_THUNK_DATA64;
 use winapi::um::winnt::MEM_COMMIT;
 use winapi::um::winnt::MEM_RESERVE;
 use winapi::um::winnt::PAGE_EXECUTE_READWRITE;
-
 
 type pVirtualAlloc = fn(PVOID, SIZE_T, DWORD, DWORD) -> *mut BYTE;
 type pDllEntry = extern "system" fn(HINSTANCE, DWORD, PVOID) -> bool;
@@ -40,6 +38,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
     let dosHeaders = dllBytes as *const IMAGE_DOS_HEADER;
     let ntHeaders =
         dllBytes.wrapping_offset((*dosHeaders).e_lfanew as isize) as *const IMAGE_NT_HEADERS64;
+
     let dllImageSize = (*ntHeaders).OptionalHeader.SizeOfImage;
     let (_ker32strw, pker32strw) =
         string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
@@ -51,7 +50,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
     let VirtualAlloc: pVirtualAlloc = std::mem::transmute(GetProcAddress(kernel32, pvirtAllocStr));
     let temp = VirtualAlloc(
         (*ntHeaders).OptionalHeader.ImageBase,
-        dllImageSize as usize + 0x1000,
+        2 * dllImageSize as usize,
         MEM_RESERVE | MEM_COMMIT,
         PAGE_EXECUTE_READWRITE,
     );
@@ -59,7 +58,7 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
         if temp == 0 as *mut u8 {
             VirtualAlloc(
                 0 as PVOID,
-                dllImageSize as usize + 0x1000,
+                2 * dllImageSize as usize,
                 MEM_RESERVE | MEM_COMMIT,
                 PAGE_EXECUTE_READWRITE,
             )
@@ -67,15 +66,8 @@ pub unsafe fn ReflectiveLoadDll(dllBytes: *mut BYTE, debug: bool) -> Option<*mut
             temp
         }
     };
-    dllBase = if (dllBase as usize) % 0x1000 != 0 {
-        // Adjust `dllBase` to the next multiple of 0x1000
-        (dllBase as usize + 0x1000 - (dllBase as usize) % 0x1000) as *mut u8
-    } else {
-        // If no adjustment is needed, just reuse the old value
-        dllBase
-    };
-    let deltaImageBase = dllBase as usize - (*ntHeaders).OptionalHeader.ImageBase as usize;
-    copy(dllBytes, dllBase, dllImageSize as usize);
+    let deltaImageBase: isize = dllBase as isize - (*ntHeaders).OptionalHeader.ImageBase as isize;
+    copy(dllBytes, dllBase, 1000);
     let mut section = image_first_section(ntHeaders);
     let mut sectionDestination;
     let mut sectionBytes;
