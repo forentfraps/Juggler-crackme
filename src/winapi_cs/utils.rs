@@ -202,6 +202,7 @@ pub struct IMAGE_IMPORT_DESCRIPTOR {
     pub FirstThunk: DWORD,
 }
 
+#[allow(dead_code)]
 pub struct IMAGE_IMPORT_BY_NAME {
     pub Hint: WORD,
     pub Name: [CHAR; 1],
