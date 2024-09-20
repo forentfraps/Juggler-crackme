@@ -25,12 +25,7 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         out_dir.to_str().unwrap()
     );
-    Command::new("cd c_aes; .\\make_microsoft_no_crt.bat")
-        .status()
-        .unwrap();
-    Command::new("cd c_verification; .\\make_microsoft_no_crt.bat")
-        .status()
-        .unwrap();
+    
     /*    embed_resource::compile("c_aes/res1.rc");
     embed_resource::compile("c_verification/res2.rc"); */
     println!("cargo:rustc-link-lib=static=tricks");

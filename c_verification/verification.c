@@ -23,6 +23,11 @@ typedef int (*pRtlExitUserProcess)(NTSTATUS status);
 typedef BOOL (*pVirtualProtect)(PVOID addr, SIZE_T size, DWORD flags,
                                 DWORD *oldprotect);
 
+typedef NTSTATUS (*pNtReadVirtualMemory)(HANDLE ProcessHandle,
+                                         PVOID BaseAddress, PVOID out_buffer,
+                                         ULONG number_to_read,
+                                         PULONG number_read);
+
 int Fail(NTSTATUS status) {
   print("The password is NOT correct, you have failed!\n", 46);
   return 0;
@@ -42,14 +47,22 @@ DWORD Verification() {
   unsigned char **key = GetProcAddress(ntdll, "RtlUserThreadStart");
   ULONGLONG *status = GetProcAddress(ntdll, "DbgBreakPoint");
   PVOID RtlExitUserProcess = GetProcAddress(ntdll, "RtlExitUserProcess");
+  pNtReadVirtualMemory NtReadVirtualMemory =
+      (pNtReadVirtualMemory)GetProcAddress(ntdll, "NtReadVirtualMemory");
+  PVOID base = GetModuleHandleW(NULL);
+
   DWORD oldprotect;
   VirtualProtect(RtlExitUserProcess, 13, PAGE_EXECUTE_READWRITE, &oldprotect);
+
   int flag = 1;
   unsigned char answerKey[] = {
       66, 2, 81,  10, 94, 83, 5,   53, 45, 42, 121, 53, 46,  0, 121, 59, 38,
       51, 9, 197, 10, 9,  8,  213, 0,  42, 29, 7,   25, 197, 6, 196, 121};
   for (int i = 0; i < 32; ++i) {
-    if ((*key)[i] != ((answerKey[i] ^ (57 + i)) - i)) {
+    unsigned char char_to_check = 0;
+    ULONG read = 0;
+    NtReadVirtualMemory((HANDLE)-1, *key + i, &char_to_check, 1, &read);
+    if (char_to_check != ((answerKey[i] ^ (57 + i)) - i)) {
       flag = 0;
     }
   }
@@ -61,7 +74,9 @@ DWORD Verification() {
   //__debugbreak();
   SetWinAddrs(RtlExitUserProcess, EtwpShutdownPrivateLoggers, f);
   *((ULONGLONG **)(rtl_payload + 2)) = (ULONGLONG *)Starter_;
-  _memcpy(RtlExitUserProcess, rtl_payload, 13);
+  ULONG bts_read = 0;
+  NtReadVirtualMemory((HANDLE)-1, rtl_payload, RtlExitUserProcess, 13,
+                      &bts_read);
   DWORD p2;
   VirtualProtect(RtlExitUserProcess, 13, oldprotect, &p2);
   return 0;

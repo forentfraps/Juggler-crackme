@@ -8,6 +8,8 @@ mod winapi_cs;
 
 use std::arch::asm;
 
+use std::time::Duration;
+
 use std::mem::transmute;
 use std::ptr::null_mut;
 use std::sync::{Arc, Condvar, Mutex};
@@ -20,7 +22,7 @@ use winapi::um::errhandlingapi::AddVectoredExceptionHandler;
 
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winnt::{
-    EXCEPTION_POINTERS, PAGE_READWRITE, PTP_CALLBACK_ENVIRON, PTP_WORK, PTP_WORK_CALLBACK,
+    EXCEPTION_POINTERS, PAGE_READWRITE,PAGE_EXECUTE_READWRITE, PTP_CALLBACK_ENVIRON, PTP_WORK, PTP_WORK_CALLBACK,
 };
 
 use winapi::vc::excpt::{EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH};
@@ -35,8 +37,19 @@ unsafe extern "system" fn exception_handler(_exception_info: *mut EXCEPTION_POIN
     // or EXCEPTION_EXECUTE_HANDLER to execute the exception handler.
     match (*((*_exception_info).ExceptionRecord)).ExceptionCode {
         0xC0000095 => (),
+        0xC0000005 =>{
+            println!("You have reached a race condition, this is NOT intended behaviour!!!");
+            return EXCEPTION_CONTINUE_SEARCH;
+        },
+        
+        0xC000001D => {
+            println!("Illigal instruction has been executed, which means that machine on which I have assembled this is better that yours, objectively. I suggest you get a hypervisor like qemu, it should support AVX");
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
         _ => {
-            println!("You have reached a race condition!!!");
+            println!("You have triggered an unknown exception! You know how it goes, blame the player not the game, IT IS YOU TO BLAME");
+
+            println!("The code is {:x}", (*((*_exception_info).ExceptionRecord)).ExceptionCode );
             return EXCEPTION_CONTINUE_SEARCH;
         }
     }
@@ -67,6 +80,7 @@ type pVirtualProtect = fn(PVOID, SIZE_T, DWORD, *mut DWORD) -> bool;
 type pTpAllocWork = fn(*mut PTP_WORK, PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON) -> NTSTATUS;
 type pTpPostWork = fn(PTP_WORK);
 type pTpReleaseWork = fn(PTP_WORK);
+type pGetSelfHandle = fn(u64) -> *mut u64;
 /* typedef NTSTATUS (NTAPI* TPALLOCWORK)(PTP_WORK* ptpWrk, PTP_WORK_CALLBACK pfnwkCallback, PVOID OptionalArg,
 * PTP_CALLBACK_ENVIRON CallbackEnvironment);
 typedef VOID (NTAPI* TPPOSTWORK)(PTP_WORK);
@@ -75,14 +89,18 @@ typedef VOID (NTAPI* TPRELEASEWORK)(PTP_WORK);*/
 fn main() {
     fake_exit!();
     let (_ker32strw, pker32strw) =
-        string_to_lpcwstr(String::from("C:\\Windows\\System32\\kernel32.dll"));
+        string_to_lpcwstr(String:: from("C:\\Windows\\System32\\kernel32.dll"));
     let (_virtProtStr, pvirtProtStr) = string_to_lpcstr(String::from("VirtualProtect"));
+    let (_getModHStr, pgetModHStr) = string_to_lpcstr(String::from("GetModuleHandleW"));
 
     unsafe {
         hide!();
+
         let _kernel32: HMODULE = GetModuleHandle(pker32strw).unwrap();
         let aes_ptr = include_bytes!("../c_aes/aes_dll_nocrt.dll");
+        let keygen = include_bytes!("../zig_key_derivation/zig-out/bin/zig_key_derivation.dll");
         let VirtualProtect: pVirtualProtect = GetProcAddress_(_kernel32, pvirtProtStr).unwrap();
+        let GetSelf: pGetSelfHandle= GetProcAddress_(_kernel32, pgetModHStr).unwrap();
         let verif_data_sec = include_bytes!("../c_verification/mod2.dll.enc");
         let mut _oldProtect: DWORD = 0;
         let condvar = Condvar::new();
@@ -94,14 +112,9 @@ fn main() {
             PAGE_READWRITE,
             &mut _oldProtect as *mut u32,
         );
+        
         let mut user_input = String::new();
-        match io::stdin().read_line(&mut user_input) {
-            Ok(_) => (),
-            Err(e) => {
-                println!("Error reading from stdin {:?}", e);
-                return;
-            }
-        }
+        
         let mut data_th2 = data.clone();
         let mut status_th2 = status.clone();
         fake_exit!();
@@ -113,17 +126,45 @@ fn main() {
         stWA = (&mut wa as *mut warden::warden_args) as u64;
         let _handle = AddVectoredExceptionHandler(1, Some(exception_handler));
 
-        let (_userStr, puserStr) = string_to_lpcstr(user_input);
+        
+        let keygen_base_addr = ReflectiveLoadDll(keygen.as_ptr() as *mut u8, false).unwrap();
+
+        hide!();
         asm!(".2byte 0x04cd");
+
+        hide!();
+        let self_base: *mut u64 = GetSelf(0);
+        VirtualProtect(
+        self_base as PVOID,
+        1024 * 330,
+        PAGE_EXECUTE_READWRITE,
+        &mut _oldProtect as *mut u32
+        );
+        let self_store_prev = *self_base;
+
+        //OFFSET TO THE LOOP IN THE ZIG .DLL
+        //FREQUENT CAUSE OF HEADACHE
+        *self_base = keygen_base_addr as u64 + 0x113B;
+
+
+
+
+
         ReflectiveLoadDll(aes_ptr.as_ptr() as *mut u8, false);
+
+        fake_exit!();
 
         let (data_lock, _) = &*data;
         let (status_lock, cvar) = &*status;
         {
             // Waiting for C to initialise its code
-            drop(cvar.wait(status_lock.lock().unwrap()).unwrap());
+            drop(cvar.wait_timeout(status_lock.lock().unwrap(),Duration::from_millis(200)).unwrap());
         }
 
+        hide!();
+        println!("Please input the key:");
+
+        hide!();
         for i in 0..(verif_data_sec.len() / 16) {
             /*
                         let (_ds, pds) = string_to_lpcstr(String::from(format!("{i}")));
@@ -159,6 +200,14 @@ fn main() {
                 }
             }
         }
+            match io::stdin().read_line(&mut user_input) {
+            Ok(_) => (),
+            Err(e) => {
+                println!("Error reading from stdin {:?}", e);
+                return;
+            }
+        }
+        let (_userStr, puserStr) = string_to_lpcstr(user_input);
 
         //Writing the user string for c_verification unit to verify
         let data_ptr = puserStr as *const u8;
@@ -181,5 +230,7 @@ fn main() {
         hide!();
         fake_exit!();
         ReflectiveLoadDll(verif_data_sec.as_ptr() as *mut u8, false);
+        *self_base = self_store_prev;
     }
+    fake_exit!();
 }

@@ -2,3 +2,5 @@
 *.exe
 *.o
 *.dll
+zig_key_derivation/zig-out
+zig_key_derivation/.zig-cache
