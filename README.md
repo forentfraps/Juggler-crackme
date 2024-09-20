@@ -25,7 +25,7 @@ git clone https://github.com/forentfraps/Juggler-crackme.git --depth=1
 cd Juggler-crackme
 .\build.bat
 ```
-### *I suggest you try solving it before you scroll down and see all of the design ideas and spoilers*
+### ⚠️*I suggest you try solving it before you scroll down and see all of the design ideas and spoilers*⚠️
 
 I update the crackme overtime, adding new functionality. All releases from V2 (including the V2) are fully funcitonal.
 
@@ -72,6 +72,8 @@ I update the crackme overtime, adding new functionality. All releases from V2 (i
 +----------------------+----------------------+----------------------+----------------------+
 
 ```
+
+The name "Juggler" comes from the data juggling between threads 
 ## Anti-Debug tricks
 
 ### Making the static analysis unbearable
