@@ -89,7 +89,7 @@ The name "Juggler" comes from the data juggling between threads
       ;here the execution resumes
       ```
       where appndByte2Rip does just what is says
-      ```
+      ```asm
       appendByte2Rip:
           pop r11
           add r11, 1
@@ -119,12 +119,12 @@ This is all easily avoidable when stepping through funcions, so the last anti-st
 ### Dynamic Anti-Debugging tricks
  - Each load is a runtime Reflective DLL Load
  - Thread locking and unlocking is just one thread entering an infinite loop like:
-   ```
+   ```asm
     label:
     jmp label
    ```
    And when the second thread is unlocking that infinite loop thread, it finds this loop, and just fills it with nops  with thread safe lock prefix like so:
-   ```
+   ```asm
     mov rax, 0x9090909090909090
     lock xchg rax, [addr of loop]
    ```
